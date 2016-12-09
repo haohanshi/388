@@ -1,104 +1,159 @@
-import requests
-import json
-import pandas
-import time
+import string, langid, grammar_check, enchant, re, json, nltk
+import scipy.sparse as sp
+import numpy as np
+from svm import SVM
+from syllables_en import count as count_syllables
+from nltk.tokenize import sent_tokenize, word_tokenize
 
-app_id = "1786012341650556"
-app_secret = "deaada8ad48ddb190897068758c4d0ae"
-access_token = app_id + "|" + app_secret
+MIN_WORDS_PER_DOC = 5
 
+# source: http://stackoverflow.com/a/7160778
+# modified so protocol is optional.
+url_regex = re.compile(
+    r'(^(?:http|ftp)s?://)?' # http:// or https:// (optional)
+    r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' # domain...
+    r'localhost|' # localhost...
+    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})' # ...or ip
+    r'(?::\d+)?' # optional port
+    r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
-def getid(pagename):
-    url = "https://graph.facebook.com/" + pagename + "?access_token=" + access_token
-    text = str(requests.get(url).text)
-    index = text.find('id":"')
-    return text[index+5:-2]
+space_or_num_regex = re.compile(r'(\d|\s)+')
+proper_noun_regex = re.compile(r'\b[A-Z0-9]\S+')
 
-def getpost(pagename):
-    msg = []
-    idl = []
-    id = getid(pagename)
-    url = "https://graph.facebook.com/v2.8/" + id + "/posts/?fields=message&limit=100&access_token=" + access_token
-    text = requests.get(url).text
-    data = json.loads(text, strict=False)
-    for set in data["data"]:
-        if "message" in set:
-            msg.append(set["message"])
-        if "id" in set:
-            idl.append(set["id"])
-    return msg, idl
-            
-#messages, ids = getpost("nytimes")
-#
-#for msg in messages:
-#    try:
-#        print (msg)
-#    except:
-#        pass
-    
+punctuation_table = dict.fromkeys(map(ord, string.punctuation))
 
-def getcomments(pagename):
-    idlist = getpost(pagename)[1]
-    parsed = []
-    raw = []
+grammar_tool = grammar_check.LanguageTool('en-US')
+spelling_tool = enchant.Dict('en_US')
 
-    num_comments = 0
-    while num_comments < 2000:
-        for id in idlist:
-            url = "https://graph.facebook.com/v2.8/" + id + "/comments?access_token=" + access_token
-            response = (requests.get(url).text)
-            raw_comments = {}
-            parsed_comments = []
+def get_sentences (doc):
+    return sent_tokenize(doc)
 
-            try:
-                raw_comments = json.loads(response, strict=False)["data"]
-            except:
-                continue
+def get_words (sentence):
+    sentence = sentence.strip()
 
-            for comment in raw_comments:
-                try:
-                    comment = comment["message"].encode("ascii")
-                    comment = comment.decode("ascii")
-                    
-                    if (len(comment.split(" ")) > 5):
-                        num_comments += 1
-                        parsed_comments.append(comment)
-                except:
-                    continue
+    # remove links
+    sentence = re.sub(url_regex, '', sentence)
 
-            raw.append(raw_comments)
-            parsed.append(parsed_comments)
-            time.sleep(0.2)
-        
-    return raw, parsed
+    # remove proper nouns
+    sentence = re.sub(proper_noun_regex, '', sentence)
 
-#nytimes_comment = getcomments("nytimes")
-#print (nytimes_comment)
-#newyorkers_comment = getcomments("newyorker")
+    tokens = nltk.word_tokenize(sentence)
+    words = []
+    for token in tokens:
+        without_punc = token.translate(punctuation_table)
+        without_space_or_nums = re.sub(space_or_num_regex, '', without_punc)
 
+        # ignore if word only consists of punctuations and numbers (e.g emoji)
+        if len(without_space_or_nums):
+            words.append(token) 
 
-pages = [
-'nytimes',
-'newyorker',
-'TheEconomist',
-'justin.bieber.film',
-'TwilightMovie',
-'minecraft',
-'clubpenguin'
-]
+    return words
 
-for page in pages:
-    print("getting data for {} ...".format(page))
-    raw, parsed = getcomments(page)
-    print("writing raw data ...")
-    with open('{}_raw.json'.format(page), 'w') as outfile:
-        json.dump(raw, outfile)
+def get_metrics (doc):
+    # initialize dict
+    metrics = [
+        'syllables', 'words', 'spelling_errors', 'grammar_errors', 'sentences'
+    ]
+    res = { metric: 0 for metric in metrics }
 
-    print("finish writing raw data from {}".format(page))
-    print("writing comments ...")
-    with open('{}.json'.format(page), 'w') as outfile:
-        json.dump(parsed, outfile)
-    print("finish writing comments from {}".format(page))
+    # initial parse
+    sentences = get_sentences(doc)
+    # words = []
 
+    # get metrics
+    num_sentences = len(sentences)
+    res['sentences'] = num_sentences
+    for sentence in sentences:
+        res['words'] += len(sentence)
+        res['grammar_errors'] += len(grammar_tool.check(sentence))
 
+        words_for_sentence = get_words(sentence)
+        # words.append(words_for_sentence)
 
+        for word in words_for_sentence:
+            res['syllables'] += count_syllables(word)
+            if not spelling_tool.check(word):
+                res['spelling_errors'] += 1
+
+    return res #, sentences, words
+
+def get_features (metrics):
+    # document is too short
+    if (metrics['words'] < MIN_WORDS_PER_DOC):
+        return None
+
+    res = []
+    num_sentences = float(metrics['sentences'])
+
+    # `syllables_per_word`: count the total number of syllables and divide by
+    # total number of words
+    res.append(metrics['syllables'] / float(metrics['words']))
+
+    # `words_per_sentence`: count the total number of words and divide by total
+    # number of sentences
+    res.append(metrics['words'] / num_sentences)
+
+    # `spelling_errors_per_sentence`: count the total number of spelling errors
+    # and divide by total number of sentences
+    res.append(metrics['spelling_errors'] / num_sentences)
+
+    # `grammer_errors_per_sentence`: count the total number of grammer errors
+    # and divide by total number of sentences
+    res.append(metrics['grammar_errors'] / num_sentences)
+
+    return np.array(res)
+
+# given a list of docs (body of text), parse into tokens
+# if doc is too short, skip
+# otherwise, use the tokens to build an example with the features:
+# `syllables_per_word`: count the total number of syllables and divide by
+# total number of words
+# `words_per_sentence`: count the total number of words and divide by total
+# number of sentences
+# `spelling_errors_per_sentence`: count the total number of spelling
+# errors and divide by total number of sentences
+# `grammer_errors_per_sentence`: count the total number of
+# grammer errors and divide by total number of sentences
+def create_features (docs):
+    X = []
+    for doc in docs:
+        # ignore if not english
+        if langid.classify(doc)[0] != 'en':
+            continue
+
+        metrics = get_metrics(doc)
+        features = get_features(metrics)
+        if features:
+            X.append(features)
+    return sp.csr_matrix(X)
+
+# comments should be a nx1 list of strings
+# labels should be a nx1 list of ints
+# the ith label should correspond to the ith comment
+def learn_classifier (docs, labels):
+    X, y = create_features(docs), labels
+    svm = SVM(X, y, 1e-4)
+    svm.train(niters=100, learning_rate=1)
+    return svm
+
+def validate (docs, labels):
+    X, y = create_features(docs), labels
+    ms = ModelSelector(X, y, np.arange(X.shape[0]), 3, 100)
+    return ms.cross_validation(0.1, 1e-4)
+
+def run ():
+    with open('labels.json', 'r') as f:
+        label_map = json.load(f)
+
+    docs = []
+    labels = []
+    for filename,label in label_map.iteritems():
+        with open('{}_70.json'.format(filename), 'r') as f:
+            docs += json.load(f)
+            labels += [label]*len(docs)
+
+    docs = np.array(docs)
+    labels = np.array(labels)
+    print validate(docs, labels)
+
+run()
