@@ -148,7 +148,7 @@ def run ():
     docs = []
     labels = []
     for filename,label in label_map.iteritems():
-        with open('{}_70.json'.format(filename), 'r') as f:
+        with open('data_70/{}_70.json'.format(filename), 'r') as f:
             docs += json.load(f)
             labels += [label]*len(docs)
 
