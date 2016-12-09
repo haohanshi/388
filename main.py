@@ -3,7 +3,7 @@ import scipy.sparse as sp
 import numpy as np
 from svm import SVM
 from syllables_en import count as count_syllables
-from nltk.tokenize import sent_tokenize, word_tokenize
+from nltk.tokenize import sent_tokenize, WhitespaceTokenizer
 
 MIN_WORDS_PER_DOC = 5
 
@@ -18,12 +18,14 @@ url_regex = re.compile(
     r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
 space_or_num_regex = re.compile(r'(\d|\s)+')
-proper_noun_regex = re.compile(r'\b[A-Z0-9]\S+')
+proper_noun_regex = re.compile(r'^[A-Z0-9]\S*')
 
 punctuation_table = dict.fromkeys(map(ord, string.punctuation))
 
 grammar_tool = grammar_check.LanguageTool('en-US')
 spelling_tool = enchant.Dict('en_US')
+
+tokenizer = WhitespaceTokenizer()
 
 def get_sentences (doc):
     return sent_tokenize(doc)
@@ -31,20 +33,20 @@ def get_sentences (doc):
 def get_words (sentence):
     sentence = sentence.strip()
 
-    # remove links
-    sentence = re.sub(url_regex, '', sentence)
-
-    # remove proper nouns
-    sentence = re.sub(proper_noun_regex, '', sentence)
-
-    tokens = nltk.word_tokenize(sentence)
     words = []
-    for token in tokens:
-        without_punc = token.translate(punctuation_table)
-        without_space_or_nums = re.sub(space_or_num_regex, '', without_punc)
+    for token in tokenizer.tokenize(sentence):
+        token = token.decode("utf-8")
 
-        # ignore if word only consists of punctuations and numbers (e.g emoji)
-        if len(without_space_or_nums):
+        # remove urls
+        modified = re.sub(url_regex, '', token)
+        # remove punctuation
+        modified = modified.translate(punctuation_table)
+        # remove proper nouns
+        modified = re.sub(proper_noun_regex, '', modified)
+        # remove whitespace and standalone numbers
+        modified = re.sub(space_or_num_regex, '', modified)
+
+        if len(modified):
             words.append(token) 
 
     return words
@@ -155,5 +157,3 @@ def run ():
     docs = np.array(docs)
     labels = np.array(labels)
     print validate(docs, labels)
-
-run()
