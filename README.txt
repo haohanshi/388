@@ -3,10 +3,8 @@
 Group Member:
 Name: Tianjun Ma
 Andrew ID: tianjunm
-
 Name: Mark Lee
 Andrew ID: marklee
-
 Name: Haohan Shi
 Andrew ID: haohans
 
