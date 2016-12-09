@@ -11,6 +11,7 @@ Andrew ID: haohans
 How to run our code:
 
 nbviewer link:
+http://nbviewer.jupyter.org/github/markblee/388/blob/master/edlevel.ipynb
 
 Links to large files:
 
