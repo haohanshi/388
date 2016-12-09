@@ -14,7 +14,7 @@ nbviewer link:
 http://nbviewer.jupyter.org/github/markblee/388/blob/master/edlevel.ipynb
 
 Links to large files:
-All files are contained in the submission of autolab
+All files are contained in the submission of Autolab
 
 Potential sources:
 
