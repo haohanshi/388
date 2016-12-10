@@ -1,4 +1,4 @@
-import string, langid, grammar_check, enchant, re, json, nltk
+import string, langid, grammar_check, enchant, re, json, nltk, time
 import scipy.sparse as sp
 import numpy as np
 from svm import SVM
@@ -6,7 +6,7 @@ from cross_validation import ModelSelector
 from syllables_en import count as count_syllables
 from nltk.tokenize import sent_tokenize, WhitespaceTokenizer
 
-MIN_WORDS_PER_DOC = 5
+MIN_WORDS_PER_DOC = 3
 
 # source: http://stackoverflow.com/a/7160778
 # modified so protocol is optional.
@@ -19,7 +19,7 @@ url_regex = re.compile(
     r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
 space_or_num_regex = re.compile(r'(\d|\s)+')
-proper_noun_regex = re.compile(r'^[A-Z0-9]\S*')
+proper_noun_regex = re.compile(r'^([0-9]|[A-Z][a-z0-9]+)')
 
 punctuation_table = dict.fromkeys(map(ord, string.punctuation))
 
@@ -68,7 +68,13 @@ def get_metrics (doc):
     res['sentences'] = num_sentences
     for sentence in sentences:
         try:
-            res['grammar_errors'] += len(grammar_tool.check(sentence))
+            try:
+                res['grammar_errors'] += len(grammar_tool.check(sentence))
+                time.sleep(0.05)
+            except Exception as e:
+                print "grammar tool failed: {}".format(e)
+                # print "reinitializing grammar tool.."
+                # time.sleep(0.2)
 
             words_for_sentence = get_words(sentence)
             res['words'] += len(words_for_sentence)
@@ -83,9 +89,14 @@ def get_metrics (doc):
                     if not spelling_tool.check(word):
                         res['spelling_errors'] += 1
                 except Exception as e:
+                    print "inner exception:", e
                     continue
         except Exception as e:
+            print "outer exception:", e
             continue
+
+    if res['words'] == 0:
+        print "discarding...", doc
 
     return res #, sentences, words
 
@@ -130,18 +141,24 @@ def get_features (metrics):
 # grammer errors and divide by total number of sentences
 def create_features (docs):
     X = []
+    non_english = 0
+    too_short = 0
+
     for doc in docs:
         # ignore if not english
         if langid.classify(doc)[0] != 'en':
+            non_english += 1
             continue
 
         metrics = get_metrics(doc)
         features = get_features(metrics)
         if features is not None:
             X.append(features)
+        else:
+            too_short += 1
 
     X = sp.csr_matrix(X)
-    print X.shape
+    print X.shape, non_english, too_short
     return X
 
 # comments should be a nx1 list of strings
@@ -150,12 +167,12 @@ def create_features (docs):
 def learn_classifier (docs, labels):
     X, y = create_features(docs), labels
     svm = SVM(X, y, 1e-4)
-    svm.train(niters=100, learning_rate=1)
+    svm.train(niters=200, learning_rate=1)
     return svm
 
 def validate (docs, labels):
     X, y = create_features(docs), labels
-    ms = ModelSelector(X, y, np.arange(X.shape[0]), 3, 100)
+    ms = ModelSelector(X, y, np.arange(X.shape[0]), 4, 100)
     return ms.cross_validation(0.1, 1e-4)
 
 def run ():
