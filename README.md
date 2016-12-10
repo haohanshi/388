@@ -1,6 +1,6 @@
 ## 15388 Final Project
 
-Group Member:
+# Group Member:
 
 Name: Tianjun Ma
 
@@ -14,12 +14,12 @@ Name: Haohan Shi
 
 Andrew ID: haohans
 
-How to run our code:
+# How to run our code:
 
 nbviewer link:
 
-Links to large files:
+# Links to large files:
 
-Potential sources:
+# Potential sources:
 
 
