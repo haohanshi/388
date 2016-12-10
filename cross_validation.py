@@ -1,4 +1,5 @@
 from svm import SVM
+import numpy as np
 
 class ModelSelector:
     """ A class that performs model selection. 

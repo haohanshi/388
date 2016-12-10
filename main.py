@@ -2,6 +2,7 @@ import string, langid, grammar_check, enchant, re, json, nltk
 import scipy.sparse as sp
 import numpy as np
 from svm import SVM
+from cross_validation import ModelSelector
 from syllables_en import count as count_syllables
 from nltk.tokenize import sent_tokenize, WhitespaceTokenizer
 
@@ -66,26 +67,37 @@ def get_metrics (doc):
     num_sentences = len(sentences)
     res['sentences'] = num_sentences
     for sentence in sentences:
-        res['words'] += len(sentence)
-        res['grammar_errors'] += len(grammar_tool.check(sentence))
+        try:
+            res['grammar_errors'] += len(grammar_tool.check(sentence))
 
-        words_for_sentence = get_words(sentence)
-        # words.append(words_for_sentence)
+            words_for_sentence = get_words(sentence)
+            res['words'] += len(words_for_sentence)
+            # words.append(words_for_sentence)
 
-        for word in words_for_sentence:
-            res['syllables'] += count_syllables(word)
-            if not spelling_tool.check(word):
-                res['spelling_errors'] += 1
+            for word in words_for_sentence:
+                try:
+                    # handle trailing punctuation for spellchecker
+                    if word[-1] in string.punctuation:
+                        word = word[:-1]
+                    res['syllables'] += count_syllables(word)
+                    if not spelling_tool.check(word):
+                        res['spelling_errors'] += 1
+                except Exception as e:
+                    continue
+        except Exception as e:
+            continue
 
     return res #, sentences, words
 
 def get_features (metrics):
+    num_sentences = metrics['sentences']
+
     # document is too short
-    if (metrics['words'] < MIN_WORDS_PER_DOC):
+    if (num_sentences == 0 or metrics['words'] < MIN_WORDS_PER_DOC):
         return None
 
     res = []
-    num_sentences = float(metrics['sentences'])
+    num_sentences = float(num_sentences)
 
     # `syllables_per_word`: count the total number of syllables and divide by
     # total number of words
@@ -125,9 +137,12 @@ def create_features (docs):
 
         metrics = get_metrics(doc)
         features = get_features(metrics)
-        if features:
+        if features is not None:
             X.append(features)
-    return sp.csr_matrix(X)
+
+    X = sp.csr_matrix(X)
+    print X.shape
+    return X
 
 # comments should be a nx1 list of strings
 # labels should be a nx1 list of ints
@@ -157,3 +172,5 @@ def run ():
     docs = np.array(docs)
     labels = np.array(labels)
     print validate(docs, labels)
+
+run()

@@ -1,3 +1,6 @@
+import scipy.sparse as sp
+import numpy as np
+
 class SVM:
     def __init__(self, X, y, reg):
         """ Initialize the SVM attributes and initialize the weights vector to the zero vector. 
@@ -39,8 +42,7 @@ class SVM:
         Xy = y.dot(X)
         return -Xy.T.dot(Xy.dot(self.theta) <= 1) + self.reg*self.theta
 
-    def train(self, niters=100, learning_rate=1, verbose=False):
-        """ Train the support vector machine with the given parameters. 
+    def train(self, niters=100, learning_rate=1, verbose=False): """ Train the support vector machine with the given parameters. 
             Args: 
                 niters (int) : the number of iterations of gradient descent to run
                 learning_rate (float) : the learning rate (or step size) to use when training
