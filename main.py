@@ -168,28 +168,47 @@ def create_features (docs):
 # the ith label should correspond to the ith comment
 def learn_classifier (docs, labels):
     X, y = create_features(docs), labels
-    svm = SVM(X, y, 1e-4)
-    svm.train(niters=200, learning_rate=1)
+
+    # perform grid search to learn hyperparameters
+    # we use [ 0.1, 1, 10 ] for learning rate search space,
+    # and [ 0.01, 0.1, 10 ] for regularization
+    ms = ModelSelector(X, y, np.arange(X.shape[0]), 4, 100)
+    lr, reg = ms.grid_search(np.logspace(-1,1,3), np.logspace(-2,1,4))
+    err, svm = MS.test(lr,reg)
+    print "learned hyperparams:", lr, reg, "error:", err
     return svm
 
-def validate (docs, labels):
-    X, y = create_features(docs), labels
-    ms = ModelSelector(X, y, np.arange(X.shape[0]), 4, 100)
-    return ms.cross_validation(0.1, 1e-4)
-
 def run ():
+    print "learning classifier..."
     with open('labels.json', 'r') as f:
         label_map = json.load(f)
 
     docs = []
     labels = []
-    for filename,label in label_map.iteritems():
+    for filename, label in label_map.iteritems():
         with open('data_70/{}_70.json'.format(filename), 'r') as f:
             docs += json.load(f)
             labels += [label]*len(docs)
 
     docs = np.array(docs)
     labels = np.array(labels)
-    print validate(docs, labels)
+    svm = learn_classifier(docs, labels)
+    print "done learning classifier"
 
-run()
+    # test on holdout set
+    print "testing on holdout set..."
+    docs = []
+    labels = []
+    for filename, label in label_map.iteritems():
+        with open('data_30/{}_30.json'.format(filename), 'r') as f:
+            docs += json.load(f)
+            labels += [label]*len(docs)
+
+    docs = np.array(docs)
+    labels = np.array(labels)
+    predicted_labels = svm.predict(docs)
+    err = (predicted_labels != labels).sum()
+    total = float(len(test_set))
+
+    print "done testing on holdout set"
+    print "error:", err / total
