@@ -53,6 +53,8 @@ def get_words (sentence):
     return words
 
 def get_metrics (doc):
+    global grammar_tool
+
     # initialize dict
     metrics = [
         'syllables', 'words', 'spelling_errors', 'grammar_errors', 'sentences'
@@ -70,11 +72,11 @@ def get_metrics (doc):
         try:
             try:
                 res['grammar_errors'] += len(grammar_tool.check(sentence))
-                time.sleep(0.05)
             except Exception as e:
                 print "grammar tool failed: {}".format(e)
-                # print "reinitializing grammar tool.."
-                # time.sleep(0.2)
+                print "reinitializing grammar tool.."
+                grammar_tool = grammar_check.LanguageTool('en-US')
+                time.sleep(0.2)
 
             words_for_sentence = get_words(sentence)
             res['words'] += len(words_for_sentence)
