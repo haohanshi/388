@@ -5,6 +5,7 @@ from svm import SVM
 from cross_validation import ModelSelector
 from syllables_en import count as count_syllables
 from nltk.tokenize import sent_tokenize, WhitespaceTokenizer
+import sklearn
 
 MIN_WORDS_PER_DOC = 3
 
@@ -172,10 +173,15 @@ def learn_classifier (X_train, y_train):
     # perform grid search to learn hyperparameters
     # we use [ 0.1, 1, 10 ] for learning rate search space,
     # and [ 0.01, 0.1, 1, 10 ] for regularization
-    ms = ModelSelector(X_train, y_train, np.arange(X_train.shape[0]), 4, 100)
-    lr, reg = ms.grid_search(np.logspace(-1,1,3), np.logspace(-2,1,4))
-    err, svm = ms.test(lr, reg)
-    print "learned hyperparams:", lr, reg, "error:", err
+    # ms = ModelSelector(X_train, y_train, np.arange(X_train.shape[0]), 4, 100)
+    # lr, reg = ms.grid_search(np.logspace(-1,1,3), np.logspace(-2,1,4))
+    # err, svm = ms.test(lr, reg)
+    # print "learned hyperparams:", lr, reg, "error:", err
+    # svm = SVM(X_train, y_train, 1e-4)
+    # svm.train(niters=200, learning_rate=1)
+
+    svm = sklearn.svm.SVC(kernel='linear')
+    svm.fit(X_train, y_train)
     return svm
 
 def run ():
@@ -187,14 +193,14 @@ def run ():
     labels = []
     for filename, label in label_map.iteritems():
         with open('data_70/{}_70.json'.format(filename), 'r') as f:
-            curr = json.load(f)[:200]
+            curr = json.load(f)[:100]
             docs += curr
             labels += [label]*len(curr)
 
     X_train, y_train = create_features(np.array(docs), np.array(labels)) 
 
-    with open('test_features', 'w') as f:
-        json.dump(zip(X_train.tolist(), labels), f)
+    # with open('test_features', 'w') as f:
+    #     json.dump(zip(X_train.tolist(), labels), f)
 
     svm = learn_classifier(X_train, y_train)
     print "done learning classifier"
@@ -205,15 +211,15 @@ def run ():
     labels = []
     for filename, label in label_map.iteritems():
         with open('data_30/{}_30.json'.format(filename), 'r') as f:
-            curr = json.load(f)
+            curr = json.load(f)[:100]
             docs += curr
             labels += [label]*len(curr)
 
     X, y = create_features(np.array(docs), np.array(labels))
     predicted_y = np.array(svm.predict(X))
 
-    with open('predictions', 'w') as f:
-        json.dump(predicted_y.tolist(), f)
+    # with open('predictions', 'w') as f:
+    #     json.dump(predicted_y.tolist(), f)
 
     err = (predicted_y != y).sum()
     total = float(len(docs))
