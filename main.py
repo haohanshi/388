@@ -174,7 +174,7 @@ def learn_classifier (docs, labels):
     # and [ 0.01, 0.1, 10 ] for regularization
     ms = ModelSelector(X, y, np.arange(X.shape[0]), 4, 100)
     lr, reg = ms.grid_search(np.logspace(-1,1,3), np.logspace(-2,1,4))
-    err, svm = MS.test(lr,reg)
+    err, svm = ms.test(lr,reg)
     print "learned hyperparams:", lr, reg, "error:", err
     return svm
 
@@ -206,7 +206,7 @@ def run ():
 
     docs = np.array(docs)
     labels = np.array(labels)
-    predicted_labels = svm.predict(docs)
+    predicted_labels = svm.predict(create_features(docs))
     err = (predicted_labels != labels).sum()
     total = float(len(test_set))
 
