@@ -77,7 +77,7 @@ def get_metrics (doc):
                 print "grammar tool failed: {}".format(e)
                 print "reinitializing grammar tool.."
                 grammar_tool = grammar_check.LanguageTool('en-US')
-                time.sleep(0.2)
+                time.sleep(0.1)
 
             words_for_sentence = get_words(sentence)
             res['words'] += len(words_for_sentence)
@@ -169,7 +169,7 @@ def create_features (docs, labels):
 # comments should be a nx1 list of strings
 # labels should be a nx1 list of ints
 # the ith label should correspond to the ith comment
-def learn_classifier (X_train, y_train):
+def learn_classifier (X_train, y_train, kernel='best'):
     # perform grid search to learn hyperparameters
     # we use [ 0.1, 1, 10 ] for learning rate search space,
     # and [ 0.01, 0.1, 1, 10 ] for regularization
@@ -179,10 +179,27 @@ def learn_classifier (X_train, y_train):
     # print "learned hyperparams:", lr, reg, "error:", err
     # svm = SVM(X_train, y_train, 1e-4)
     # svm.train(niters=200, learning_rate=1)
-
-    svm = sklearn.svm.SVC(kernel='linear')
+    if kernel == 'best':
+        kernel = 'poly'
+    svm = sklearn.svm.SVC(kernel=kernel)
     svm.fit(X_train, y_train)
     return svm
+
+def evaluate_classifier (classifier, X_validate, y_validate):
+    return classifier.score(X_validate, y_validate)
+
+# chooses optimal kernel
+def optimal_kernel (X_train, y_train, X_validate, y_validate):
+    best_kernel = None
+    best_accuracy = 0
+    for kernel in ['linear', 'rbf', 'poly', 'sigmoid']:
+        classifier = learn_classifier(X_train, y_train, kernel)
+        accuracy = evaluate_classifier(classifier, X_validate, y_validate)
+        if best_kernel is None or accuracy > best_accuracy:
+            best_accuracy = accuracy
+            best_kernel = kernel
+        print kernel, ":", accuracy
+    return best_kernel, best_accuracy
 
 def run ():
     print "learning classifier..."
@@ -193,36 +210,32 @@ def run ():
     labels = []
     for filename, label in label_map.iteritems():
         with open('data_70/{}_70.json'.format(filename), 'r') as f:
-            curr = json.load(f)[:100]
+            curr = json.load(f)
             docs += curr
             labels += [label]*len(curr)
 
     X_train, y_train = create_features(np.array(docs), np.array(labels)) 
 
-    # with open('test_features', 'w') as f:
-    #     json.dump(zip(X_train.tolist(), labels), f)
+    with open('test_features', 'w') as f:
+        json.dump(zip(X_train.tolist(), y_train), f)
 
-    svm = learn_classifier(X_train, y_train)
-    print "done learning classifier"
+    # svm = learn_classifier(X_train, y_train)
+    # print "done learning classifier"
 
-    # test on holdout set
-    print "testing on holdout set..."
+    # # test on holdout set
+    # print "testing on holdout set..."
     docs = []
     labels = []
     for filename, label in label_map.iteritems():
         with open('data_30/{}_30.json'.format(filename), 'r') as f:
-            curr = json.load(f)[:100]
+            curr = json.load(f)
             docs += curr
             labels += [label]*len(curr)
 
     X, y = create_features(np.array(docs), np.array(labels))
-    predicted_y = np.array(svm.predict(X))
 
-    # with open('predictions', 'w') as f:
-    #     json.dump(predicted_y.tolist(), f)
-
-    err = (predicted_y != y).sum()
-    total = float(len(docs))
+    # print "choosing optimal kernel"
+    # print optimal_kernel(X_train, y_train, X, y)
 
     print "done testing on holdout set"
-    print "error:", err / total
+    print "accuracy:", evaluate_classifier(svm, X, y)
