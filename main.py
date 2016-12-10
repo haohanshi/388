@@ -1,5 +1,5 @@
 import string, langid, grammar_check, enchant, re, json, nltk, time
-import scipy.sparse as sp
+# import scipy.sparse as sp
 import numpy as np
 from svm import SVM
 from cross_validation import ModelSelector
@@ -141,12 +141,12 @@ def get_features (metrics):
 # errors and divide by total number of sentences
 # `grammer_errors_per_sentence`: count the total number of
 # grammer errors and divide by total number of sentences
-def create_features (docs):
-    X = []
+def create_features (docs, labels):
+    X, y = [], []
     non_english = 0
     too_short = 0
 
-    for doc in docs:
+    for i, doc in enumerate(docs):
         # ignore if not english
         if langid.classify(doc)[0] != 'en':
             non_english += 1
@@ -156,12 +156,14 @@ def create_features (docs):
         features = get_features(metrics)
         if features is not None:
             X.append(features)
+            y.append(labels[i])
         else:
             too_short += 1
 
-    X = sp.csr_matrix(X)
-    print X.shape, non_english, too_short
-    return X
+    X = np.matrix(X)
+    y = np.array(y)
+    print X.shape, len(y), non_english, too_short
+    return X, y
 
 # comments should be a nx1 list of strings
 # labels should be a nx1 list of ints
@@ -170,7 +172,7 @@ def learn_classifier (X_train, y_train):
     # perform grid search to learn hyperparameters
     # we use [ 0.1, 1, 10 ] for learning rate search space,
     # and [ 0.01, 0.1, 1, 10 ] for regularization
-    ms = ModelSelector(X_train, y_train, np.arange(X.shape[0]), 4, 100)
+    ms = ModelSelector(X_train, y_train, np.arange(X_train.shape[0]), 4, 100)
     lr, reg = ms.grid_search(np.logspace(-1,1,3), np.logspace(-2,1,4))
     err, svm = ms.test(lr, reg)
     print "learned hyperparams:", lr, reg, "error:", err
@@ -189,14 +191,10 @@ def run ():
             docs += curr
             labels += [label]*len(curr)
 
-    with open('test_tuples', 'w') as f:
-        json.dump(zip(docs, labels), f)
-
-    docs = np.array(docs)
-    X_train, y_train = create_features(docs), np.array(labels)
+    X_train, y_train = create_features(np.array(docs), np.array(labels)) 
 
     with open('test_features', 'w') as f:
-        json.dump(zip(X_train, labels), f)
+        json.dump(zip(X_train.tolist(), labels), f)
 
     svm = learn_classifier(X_train, y_train)
     print "done learning classifier"
@@ -211,10 +209,12 @@ def run ():
             docs += curr
             labels += [label]*len(curr)
 
-    docs = np.array(docs)
-    X, y = create_features(docs), np.array(labels)
-    predicted_y = svm.predict(X)
-    print type(y), type(predicted_y)
+    X, y = create_features(np.array(docs), np.array(labels))
+    predicted_y = np.array(svm.predict(X))
+
+    with open('predictions', 'w') as f:
+        json.dump(predicted_y.tolist(), f)
+
     err = (predicted_y != y).sum()
     total = float(len(docs))
 
