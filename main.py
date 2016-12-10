@@ -166,15 +166,13 @@ def create_features (docs):
 # comments should be a nx1 list of strings
 # labels should be a nx1 list of ints
 # the ith label should correspond to the ith comment
-def learn_classifier (docs, labels):
-    X, y = create_features(docs), labels
-
+def learn_classifier (X_train, y_train):
     # perform grid search to learn hyperparameters
     # we use [ 0.1, 1, 10 ] for learning rate search space,
-    # and [ 0.01, 0.1, 10 ] for regularization
-    ms = ModelSelector(X, y, np.arange(X.shape[0]), 4, 100)
+    # and [ 0.01, 0.1, 1, 10 ] for regularization
+    ms = ModelSelector(X_train, y_train, np.arange(X.shape[0]), 4, 100)
     lr, reg = ms.grid_search(np.logspace(-1,1,3), np.logspace(-2,1,4))
-    err, svm = ms.test(lr,reg)
+    err, svm = ms.test(lr, reg)
     print "learned hyperparams:", lr, reg, "error:", err
     return svm
 
@@ -187,12 +185,20 @@ def run ():
     labels = []
     for filename, label in label_map.iteritems():
         with open('data_70/{}_70.json'.format(filename), 'r') as f:
-            docs += json.load(f)
-            labels += [label]*len(docs)
+            curr = json.load(f)[:200]
+            docs += curr
+            labels += [label]*len(curr)
+
+    with open('test_tuples', 'w') as f:
+        json.dump(zip(docs, labels), f)
 
     docs = np.array(docs)
-    labels = np.array(labels)
-    svm = learn_classifier(docs, labels)
+    X_train, y_train = create_features(docs), np.array(labels)
+
+    with open('test_features', 'w') as f:
+        json.dump(zip(X_train, labels), f)
+
+    svm = learn_classifier(X_train, y_train)
     print "done learning classifier"
 
     # test on holdout set
@@ -201,14 +207,16 @@ def run ():
     labels = []
     for filename, label in label_map.iteritems():
         with open('data_30/{}_30.json'.format(filename), 'r') as f:
-            docs += json.load(f)
-            labels += [label]*len(docs)
+            curr = json.load(f)
+            docs += curr
+            labels += [label]*len(curr)
 
     docs = np.array(docs)
-    labels = np.array(labels)
-    predicted_labels = svm.predict(create_features(docs))
-    err = (predicted_labels != labels).sum()
-    total = float(len(test_set))
+    X, y = create_features(docs), np.array(labels)
+    predicted_y = svm.predict(X)
+    print type(y), type(predicted_y)
+    err = (predicted_y != y).sum()
+    total = float(len(docs))
 
     print "done testing on holdout set"
     print "error:", err / total
