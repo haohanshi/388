@@ -84,7 +84,11 @@ pages = [
 'justin.bieber.film',
 'TwilightMovie',
 'minecraft',
-'clubpenguin'
+'clubpenguin',
+'nature',
+'engineering',
+'elsevierpsychology',
+'IEEE.org'
 ]
 
 for page in pages:
