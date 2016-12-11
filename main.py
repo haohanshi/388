@@ -1,4 +1,4 @@
-import string, langid, grammar_check, enchant, re, json, nltk, time
+import sys, string, langid, grammar_check, enchant, re, json, nltk, time
 import os.path
 import numpy as np
 # from cross_validation import ModelSelector
@@ -8,15 +8,19 @@ from sklearn.svm import SVC as SVM
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import accuracy_score
 
 MIN_WORDS_PER_DOC = 3
+LABELS_FILE = "labels.json"
 TRAIN_FEATURES_FILE = "features/train_features.json"
 VALIDATE_FEATURES_FILE = "features/validate_features.json"
 TRAIN_DATA_DIR = "data_70"
 VALIDATE_DATA_DIR = "data_30"
-GRID_SEARCH_RESULTS = "grid_search.txt"
+GRID_SEARCH_RESULTS_FILE = "grid_search.txt"
 OPTIMAL_KERNEL = "linear"
-C = 100
+# C = 100
+C = 10
+SOLVER = "lbfgs"
 
 # source: http://stackoverflow.com/a/7160778
 # modified so protocol is optional.
@@ -179,7 +183,9 @@ def create_features (docs, labels):
 # labels should be a nx1 list of ints
 # the ith label should correspond to the ith comment
 def learn_classifier (X_train, y_train, kernel='best'):
-    clf = LogisticRegression(C=C)
+    print "learning classifier..."
+
+    clf = LogisticRegression(C=C, solver=SOLVER)
 
     # clf = SGDClassifier(loss="log", n_iter=1000)
 
@@ -191,10 +197,9 @@ def learn_classifier (X_train, y_train, kernel='best'):
     #     clf = SVM(C=C)
 
     clf.fit(X_train, y_train)
-    return clf
 
-def evaluate_classifier (classifier, X_validate, y_validate):
-    return classifier.score(X_validate, y_validate)
+    print "done learning classifier"
+    return clf
 
 # chooses optimal kernel
 def optimal_kernel (X_train, y_train, X_validate, y_validate):
@@ -202,26 +207,32 @@ def optimal_kernel (X_train, y_train, X_validate, y_validate):
     best_accuracy = 0
     for kernel in ['linear', 'rbf', 'poly', 'sigmoid']:
         classifier = learn_classifier(X_train, y_train, kernel)
-        accuracy = evaluate_classifier(classifier, X_validate, y_validate)
+        accuracy = classifier.score(X_validate, y_validate)
         if best_kernel is None or accuracy > best_accuracy:
             best_accuracy = accuracy
             best_kernel = kernel
         print kernel, ":", accuracy
-
-    OPTIMAL_KERNEL = best_kernel
     return best_kernel, best_accuracy
 
 def grid_search (X_train, y_train):
     print "running grid search..."
     clf = LogisticRegression()
-    params = { "C": [0.001, 0.01, 0.1, 1, 10, 100, 1000] }
+    params = {
+        "solver": ["lbfgs", "newton-cg", "sag"],
+        "max_iter": [100, 200, 1000, 4000],
+        "multi_class": ["ovr", "multinomial"],
+        "C": [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+    }
     classifier = GridSearchCV(clf, params)
     classifier.fit(X_train, y_train)
-    res = classifier.best_params_
-    print res
-    print "dumping results to file: {}...".format(GRID_SEARCH_RESULTS)
-    with open(GRID_SEARCH_RESULTS, 'w') as f:
-        f.write("{}".format(res))
+    best = classifier.best_params_
+    print best
+    print "dumping results to file: {}...".format(GRID_SEARCH_RESULTS_FILE)
+    with open(GRID_SEARCH_RESULTS_FILE, 'w') as f:
+        f.write("{}".format(best))
+    return best
+
+## data/feature helpers
 
 def read_features (filepath):
     print "reading from {}...".format(filepath)
@@ -233,7 +244,7 @@ def read_features (filepath):
     return X, y
 
 def read_raw_data (dirname):
-    with open('labels.json', 'r') as f:
+    with open(LABELS_FILE, 'r') as f:
         label_map = json.load(f)
 
     docs, labels = [], []
@@ -246,12 +257,14 @@ def read_raw_data (dirname):
             labels += [label]*len(curr)
     return docs, labels
 
-def run ():
+## wrappers 
+
+def gen_train_features ():
     print "generating features for training..."
     try:
         # try using pre-generated features if they exist
-        print "attempting to read from file..."
         X_train, y_train = read_features(TRAIN_FEATURES_FILE)
+        print "features already generated"
     except:
         print "generating from raw data..."
         docs, labels = read_raw_data(TRAIN_DATA_DIR)
@@ -259,25 +272,16 @@ def run ():
 
         with open(TRAIN_FEATURES_FILE, 'w') as f:
             json.dump(zip(X_train.tolist(), y_train), f)
+
     print "done generating features for training"
+    return X_train, y_train
 
-    if not OPTIMAL_KERNEL:
-        print "choosing optimal kernel"
-        print "this might take a while..."
-        print optimal_kernel(X_train, y_train, X_validate, y_validate)
-
-    # grid_search(X_train, y_train)
-
-    print "learning classifier..."
-    classifier = learn_classifier(X_train, y_train)
-    print "done learning classifier"
-
-    # test on holdout set
+def gen_validate_features ():
     print "generating features for validation..."
     try:
         # try using pre-generated features if they exist
-        print "attempting to read from file..."
         X, y = read_features(VALIDATE_FEATURES_FILE)
+        print "features already generated"
     except:
         print "generating from raw data..."
         docs, labels = read_raw_data(VALIDATE_DATA_DIR)
@@ -285,7 +289,42 @@ def run ():
 
         with open(VALIDATE_FEATURES_FILE, 'w') as f:
             json.dump(zip(X.tolist(), y), f)
+
     print "done generating features for validation"
+    return X, y
+
+def choose_optimal_kernel ():
+    X_train, y_train = gen_train_features()
+    X, y = gen_validate_features()
+
+    print "choosing optimal kernel"
+    print "this might take a while..."
+    print optimal_kernel(X_train, y_train, X, y)
+
+def choose_optimal_params ():
+    X_train, y_train = gen_train_features()
+    grid_search(X_train, y_train)
+
+def test ():
+    X_train, y_train = gen_train_features()
+    classifier = learn_classifier(X_train, y_train)
 
     print "testing on holdout set..."
-    print "accuracy:", evaluate_classifier(classifier, X, y)
+    X, y = gen_validate_features()
+    y_pred = classifier.predict(X)
+    print "accuracy:", accuracy_score(y, y_pred)
+    print "score:", classifier.score(X, y)
+
+if __name__ == "__main__":
+    option = sys.argv[1]
+    if option == "optimize_kernel":
+        choose_optimal_kernel()
+    elif option == "optimize_params":
+        choose_optimal_params()
+    elif option == "generate_features":
+        gen_train_features()
+        gen_validate_features()
+    elif option == "test":
+        test()
+    else:
+        print "invalid option"
