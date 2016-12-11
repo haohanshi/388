@@ -1,13 +1,22 @@
 import string, langid, grammar_check, enchant, re, json, nltk, time
-# import scipy.sparse as sp
+import os.path
 import numpy as np
-from svm import SVM
-from cross_validation import ModelSelector
+# from cross_validation import ModelSelector
 from syllables_en import count as count_syllables
 from nltk.tokenize import sent_tokenize, WhitespaceTokenizer
-import sklearn
+from sklearn.svm import SVC as SVM
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import SGDClassifier
 
 MIN_WORDS_PER_DOC = 3
+TRAIN_FEATURES_FILE = "features/train_features.json"
+VALIDATE_FEATURES_FILE = "features/validate_features.json"
+TRAIN_DATA_DIR = "data_70"
+VALIDATE_DATA_DIR = "data_30"
+GRID_SEARCH_RESULTS = "grid_search.txt"
+OPTIMAL_KERNEL = "linear"
+C = 100
 
 # source: http://stackoverflow.com/a/7160778
 # modified so protocol is optional.
@@ -161,7 +170,7 @@ def create_features (docs, labels):
         else:
             too_short += 1
 
-    X = np.matrix(X)
+    X = np.array(X)
     y = np.array(y)
     print X.shape, len(y), non_english, too_short
     return X, y
@@ -170,20 +179,19 @@ def create_features (docs, labels):
 # labels should be a nx1 list of ints
 # the ith label should correspond to the ith comment
 def learn_classifier (X_train, y_train, kernel='best'):
-    # perform grid search to learn hyperparameters
-    # we use [ 0.1, 1, 10 ] for learning rate search space,
-    # and [ 0.01, 0.1, 1, 10 ] for regularization
-    # ms = ModelSelector(X_train, y_train, np.arange(X_train.shape[0]), 4, 100)
-    # lr, reg = ms.grid_search(np.logspace(-1,1,3), np.logspace(-2,1,4))
-    # err, svm = ms.test(lr, reg)
-    # print "learned hyperparams:", lr, reg, "error:", err
-    # svm = SVM(X_train, y_train, 1e-4)
-    # svm.train(niters=200, learning_rate=1)
-    if kernel == 'best':
-        kernel = 'poly'
-    svm = sklearn.svm.SVC(kernel=kernel)
-    svm.fit(X_train, y_train)
-    return svm
+    clf = LogisticRegression(C=C)
+
+    # clf = SGDClassifier(loss="log", n_iter=1000)
+
+    # if kernel == 'best' and OPTIMAL_KERNEL:
+    #     print "using kernel: {}".format(OPTIMAL_KERNEL)
+    #     clf = SVM(C=C, kernel=OPTIMAL_KERNEL)
+    # else:
+    #     print "using default kernel"
+    #     clf = SVM(C=C)
+
+    clf.fit(X_train, y_train)
+    return clf
 
 def evaluate_classifier (classifier, X_validate, y_validate):
     return classifier.score(X_validate, y_validate)
@@ -199,43 +207,85 @@ def optimal_kernel (X_train, y_train, X_validate, y_validate):
             best_accuracy = accuracy
             best_kernel = kernel
         print kernel, ":", accuracy
+
+    OPTIMAL_KERNEL = best_kernel
     return best_kernel, best_accuracy
 
-def run ():
-    print "learning classifier..."
+def grid_search (X_train, y_train):
+    print "running grid search..."
+    clf = LogisticRegression()
+    params = { "C": [0.001, 0.01, 0.1, 1, 10, 100, 1000] }
+    classifier = GridSearchCV(clf, params)
+    classifier.fit(X_train, y_train)
+    res = classifier.best_params_
+    print res
+    print "dumping results to file: {}...".format(GRID_SEARCH_RESULTS)
+    with open(GRID_SEARCH_RESULTS, 'w') as f:
+        f.write("{}".format(res))
+
+def read_features (filepath):
+    print "reading from {}...".format(filepath)
+    with open(filepath) as f:
+        features = json.load(f)
+        features = zip(*features) # "unzip"
+        X = np.array(features[0])
+        y = np.array(features[1])
+    return X, y
+
+def read_raw_data (dirname):
     with open('labels.json', 'r') as f:
         label_map = json.load(f)
 
-    docs = []
-    labels = []
+    docs, labels = [], []
     for filename, label in label_map.iteritems():
-        with open('data_70/{}_70.json'.format(filename), 'r') as f:
+        filepath = os.path.join(dirname, '{}.json'.format(filename))
+        print "reading from {}...".format(filepath)
+        with open(filepath, 'r') as f:
             curr = json.load(f)
             docs += curr
             labels += [label]*len(curr)
+    return docs, labels
 
-    X_train, y_train = create_features(np.array(docs), np.array(labels)) 
+def run ():
+    print "generating features for training..."
+    try:
+        # try using pre-generated features if they exist
+        print "attempting to read from file..."
+        X_train, y_train = read_features(TRAIN_FEATURES_FILE)
+    except:
+        print "generating from raw data..."
+        docs, labels = read_raw_data(TRAIN_DATA_DIR)
+        X_train, y_train = create_features(np.array(docs), np.array(labels)) 
 
-    with open('test_features', 'w') as f:
-        json.dump(zip(X_train.tolist(), y_train), f)
+        with open(TRAIN_FEATURES_FILE, 'w') as f:
+            json.dump(zip(X_train.tolist(), y_train), f)
+    print "done generating features for training"
 
-    # svm = learn_classifier(X_train, y_train)
-    # print "done learning classifier"
+    if not OPTIMAL_KERNEL:
+        print "choosing optimal kernel"
+        print "this might take a while..."
+        print optimal_kernel(X_train, y_train, X_validate, y_validate)
 
-    # # test on holdout set
-    # print "testing on holdout set..."
-    docs = []
-    labels = []
-    for filename, label in label_map.iteritems():
-        with open('data_30/{}_30.json'.format(filename), 'r') as f:
-            curr = json.load(f)
-            docs += curr
-            labels += [label]*len(curr)
+    # grid_search(X_train, y_train)
 
-    X, y = create_features(np.array(docs), np.array(labels))
+    print "learning classifier..."
+    classifier = learn_classifier(X_train, y_train)
+    print "done learning classifier"
 
-    # print "choosing optimal kernel"
-    # print optimal_kernel(X_train, y_train, X, y)
+    # test on holdout set
+    print "generating features for validation..."
+    try:
+        # try using pre-generated features if they exist
+        print "attempting to read from file..."
+        X, y = read_features(VALIDATE_FEATURES_FILE)
+    except:
+        print "generating from raw data..."
+        docs, labels = read_raw_data(VALIDATE_DATA_DIR)
+        X, y = create_features(np.array(docs), np.array(labels))
 
-    print "done testing on holdout set"
-    print "accuracy:", evaluate_classifier(svm, X, y)
+        with open(VALIDATE_FEATURES_FILE, 'w') as f:
+            json.dump(zip(X.tolist(), y), f)
+    print "done generating features for validation"
+
+    print "testing on holdout set..."
+    print "accuracy:", evaluate_classifier(classifier, X, y)
