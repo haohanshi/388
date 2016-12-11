@@ -271,7 +271,7 @@ def read_raw_data (raw_dir, feature_dir, label_map):
 
             # save to file
             with open(os.path.join(feature_dir, filename), 'w') as g:
-                json.dump(zip(X_curr.tolist(), y_curr), f)
+                json.dump(zip(X_curr.tolist(), y_curr), g)
 
             # aggregate results
             X = np.concatenate((X, X_curr))
