@@ -12,11 +12,12 @@ from sklearn.linear_model import LogisticRegression, LogisticRegressionCV #, SGD
 from sklearn.metrics import accuracy_score
 
 MIN_WORDS_PER_DOC = 3
-LABELS_FILE = "labels.json"
-TRAIN_FEATURES_FILE = "features/train_features.json"
-VALIDATE_FEATURES_FILE = "features/validate_features.json"
-TRAIN_DATA_DIR = "data_70"
-VALIDATE_DATA_DIR = "data_30"
+LABELS_FILE = "labels-new.json" # "labels.json"
+TRAIN_FEATURES_DIR = "train_features"
+VALIDATE_FEATURES_DIR = "validate_features"
+TRAIN_DATA_DIR = "train_data"
+VALIDATE_DATA_DIR = "validate_data"
+TEST_DATA_DIR = "test_data"
 GRID_SEARCH_RESULTS_FILE = "grid_search.txt"
 OPTIMAL_KERNEL = "linear"
 # C = 100
@@ -177,7 +178,7 @@ def create_features (docs, labels):
 
     X = np.array(X)
     y = np.array(y)
-    print X.shape, len(y), non_english, too_short
+    print X.shape, y.shape, non_english, too_short
     return X, y
 
 # comments should be a nx1 list of strings
@@ -185,8 +186,19 @@ def create_features (docs, labels):
 # the ith label should correspond to the ith comment
 def learn_classifier (X_train, y_train, kernel='best'):
     print "learning classifier..."
+    clf = LogisticRegressionCV(
+        Cs=list(np.power(10.0, np.arange(-10, 10))),
+        penalty='l2',
+        # scoring='roc_auc',
+        cv=10, # kfolds with k=10
+        random_state=42,
+        max_iter=10000,
+        fit_intercept=True,
+        solver='lbfgs', #'newton-cg',
+        tol=1e-4
+    )
 
-    clf = LogisticRegression(C=C, solver=SOLVER)
+    # clf = LogisticRegression(C=C, solver=SOLVER)
 
     # clf = SGDClassifier(loss="log", n_iter=1000)
 
@@ -198,11 +210,10 @@ def learn_classifier (X_train, y_train, kernel='best'):
     #     clf = SVM(C=C)
 
     clf.fit(X_train, y_train)
-
     print "done learning classifier"
     return clf
 
-# chooses optimal kernel
+# chooses optimal kernel for svm
 def optimal_kernel (X_train, y_train, X_validate, y_validate):
     best_kernel = None
     best_accuracy = 0
@@ -218,79 +229,77 @@ def optimal_kernel (X_train, y_train, X_validate, y_validate):
 def optimal_hyperparams (X_train, y_train):
     print "running grid search..."
     clf = LogisticRegression()
-    # params = {
-    #     "solver": ["lbfgs", "newton-cg", "sag"],
-    #     "max_iter": [100, 1000, 10000],
-    #     "multi_class": ["ovr", "multinomial"],
-    #     "C": [0.001, 0.01, 0.1, 1, 10, 100, 1000]
-    # }
-    classifier = LogisticRegressionCV(
-        Cs=list(np.power(10.0, np.arange(-10, 10))),
-        penalty='l2',
-        # scoring='roc_auc',
-        cv=10, # kfolds with k=10
-        random_state=42,
-        max_iter=10000,
-        fit_intercept=True,
-        solver='lbfgs', #'newton-cg',
-        tol=1e-4
-    )
-    # classifier = GridSearchCV(clf, params)
+    params = {
+        "solver": ["lbfgs", "newton-cg", "sag"],
+        "max_iter": [100, 1000, 10000],
+        "multi_class": ["ovr", "multinomial"],
+        "C": [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+    }
+    classifier = GridSearchCV(clf, params)
     classifier.fit(X_train, y_train)
-    print classifier.scores_[1].mean(axis=0).max()
-    print classifier.get_params()
-    # best = classifier.best_params_
-    # print "best params:", best
-    # print "best score:", classifier.best_score_
-    # print "dumping results to file: {}...".format(GRID_SEARCH_RESULTS_FILE)
-    # with open(GRID_SEARCH_RESULTS_FILE, 'w') as f:
-    #     f.write("{}".format(best))
+    best = classifier.best_params_
+    print "best params:", best
+    print "best score:", classifier.best_score_
+    print "dumping results to file: {}...".format(GRID_SEARCH_RESULTS_FILE)
+    with open(GRID_SEARCH_RESULTS_FILE, 'w') as f:
+        f.write("{}".format(best))
 
 ## data/feature helpers
 
-def read_features (filepath):
-    print "reading from {}...".format(filepath)
-    with open(filepath) as f:
-        features = json.load(f)
-        features = zip(*features) # "unzip"
-        X = np.array(features[0])
-        y = np.array(features[1])
+def read_features (feature_dir, label_map):
+    print "reading from {}...".format(feature_dir)
+    features = []
+    for feature_file in label_map.keys():
+        with open(os.path.join(feature_dir, feature_file)) as f:
+            features += json.load(f)
+
+    features = zip(*features) # "unzip"
+    X = np.array(features[0])
+    y = np.array(features[1])
     return X, y
 
-def read_raw_data (dirname):
-    with open(LABELS_FILE, 'r') as f:
-        label_map = json.load(f)
-
-    docs, labels = [], []
-    for filename, label in label_map.iteritems():
-        filepath = os.path.join(dirname, '{}.json'.format(filename))
-        print "reading from {}...".format(filepath)
-        with open(filepath, 'r') as f:
+def read_raw_data (raw_dir, feature_dir, label_map):
+    X, y = [], []
+    for src, label in label_map.iteritems():
+        filename = os.path.join(raw_dir, '{}.json'.format(src))
+        print "reading from {}...".format(filename)
+        with open(filename, 'r') as f:
             curr = json.load(f)
-            docs += curr
-            labels += [label]*len(curr)
-    return docs, labels
+            labels = [label]*len(curr)
+            X_curr, y_curr = create_features(np.array(curr), np.array(labels))
+
+            # save to file
+            with open(os.path.join(feature_dir, filename)) as g:
+                json.dump(zip(X_curr.tolist(), y_curr), f)
+
+            # aggregate results
+            X = np.concatenate((X, X_curr))
+            y = np.concatenate((y, y_curr))
+    return X, y
 
 ## wrappers 
 
 def gen_train_features ():
+    with open(LABELS_FILE, 'r') as f:
+        label_map = json.load(f)
+
     print "generating features for training..."
     try:
         # try using pre-generated features if they exist
-        X_train, y_train = read_features(TRAIN_FEATURES_FILE)
+        X_train, y_train = read_features(TRAIN_FEATURES_DIR, label_map)
         print "features already generated"
     except:
         print "generating from raw data..."
-        docs, labels = read_raw_data(TRAIN_DATA_DIR)
-        X_train, y_train = create_features(np.array(docs), np.array(labels)) 
-
-        with open(TRAIN_FEATURES_FILE, 'w') as f:
-            json.dump(zip(X_train.tolist(), y_train), f)
+        X_train, y_train = read_raw_data(TRAIN_DATA_DIR, TRAIN_FEATURES_DIR,
+            label_map)
 
     print "done generating features for training"
     return X_train, y_train
 
 def gen_validate_features ():
+    with open(LABELS_FILE, 'r') as f:
+        label_map = json.load(f)
+
     print "generating features for validation..."
     try:
         # try using pre-generated features if they exist
@@ -298,11 +307,8 @@ def gen_validate_features ():
         print "features already generated"
     except:
         print "generating from raw data..."
-        docs, labels = read_raw_data(VALIDATE_DATA_DIR)
-        X, y = create_features(np.array(docs), np.array(labels))
-
-        with open(VALIDATE_FEATURES_FILE, 'w') as f:
-            json.dump(zip(X.tolist(), y), f)
+        X, y = read_raw_data(VALIDATE_DATA_DIR, VALIDATE_FEATURES_DIR,
+            label_map)
 
     print "done generating features for validation"
     return X, y
