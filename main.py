@@ -259,7 +259,7 @@ def read_features (feature_dir, label_map):
     return X, y
 
 def read_raw_data (raw_dir, feature_dir, label_map):
-    X, y = [], []
+    X, y = None, None
     for src, label in label_map.iteritems():
         filename = '{}.json'.format(src)
         filepath = os.path.join(raw_dir, filename)
@@ -274,8 +274,12 @@ def read_raw_data (raw_dir, feature_dir, label_map):
                 json.dump(zip(X_curr.tolist(), y_curr), g)
 
             # aggregate results
-            X = np.concatenate((X, X_curr))
-            y = np.concatenate((y, y_curr))
+            if X is None or y is None:
+                X = X_curr
+                y = y_curr
+            else:
+                X = np.concatenate((X, X_curr))
+                y = np.concatenate((y, y_curr))
     return X, y
 
 ## wrappers 
