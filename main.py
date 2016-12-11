@@ -1,3 +1,5 @@
+#! /usr/bin/env python
+
 import sys, string, langid, grammar_check, enchant, re, json, nltk, time
 import os.path
 import numpy as np
@@ -6,8 +8,7 @@ from syllables_en import count as count_syllables
 from nltk.tokenize import sent_tokenize, WhitespaceTokenizer
 from sklearn.svm import SVC as SVM
 from sklearn.model_selection import GridSearchCV
-from sklearn.linear_model import LogisticRegression
-from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV #, SGDClassifier
 from sklearn.metrics import accuracy_score
 
 MIN_WORDS_PER_DOC = 3
@@ -214,23 +215,36 @@ def optimal_kernel (X_train, y_train, X_validate, y_validate):
         print kernel, ":", accuracy
     return best_kernel, best_accuracy
 
-def grid_search (X_train, y_train):
+def optimal_hyperparams (X_train, y_train):
     print "running grid search..."
     clf = LogisticRegression()
-    params = {
-        "solver": ["lbfgs", "newton-cg", "sag"],
-        "max_iter": [100, 200, 1000, 4000],
-        "multi_class": ["ovr", "multinomial"],
-        "C": [0.001, 0.01, 0.1, 1, 10, 100, 1000]
-    }
-    classifier = GridSearchCV(clf, params)
+    # params = {
+    #     "solver": ["lbfgs", "newton-cg", "sag"],
+    #     "max_iter": [100, 1000, 10000],
+    #     "multi_class": ["ovr", "multinomial"],
+    #     "C": [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+    # }
+    classifier = LogisticRegressionCV(
+        Cs=list(np.power(10.0, np.arange(-10, 10))),
+        penalty='l2',
+        # scoring='roc_auc',
+        cv=10, # kfolds with k=10
+        random_state=42,
+        max_iter=10000,
+        fit_intercept=True,
+        solver='lbfgs', #'newton-cg',
+        tol=1e-4
+    )
+    # classifier = GridSearchCV(clf, params)
     classifier.fit(X_train, y_train)
-    best = classifier.best_params_
-    print best
-    print "dumping results to file: {}...".format(GRID_SEARCH_RESULTS_FILE)
-    with open(GRID_SEARCH_RESULTS_FILE, 'w') as f:
-        f.write("{}".format(best))
-    return best
+    print classifier.scores_[1].mean(axis=0).max()
+    print classifier.get_params()
+    # best = classifier.best_params_
+    # print "best params:", best
+    # print "best score:", classifier.best_score_
+    # print "dumping results to file: {}...".format(GRID_SEARCH_RESULTS_FILE)
+    # with open(GRID_SEARCH_RESULTS_FILE, 'w') as f:
+    #     f.write("{}".format(best))
 
 ## data/feature helpers
 
@@ -303,7 +317,7 @@ def choose_optimal_kernel ():
 
 def choose_optimal_params ():
     X_train, y_train = gen_train_features()
-    grid_search(X_train, y_train)
+    optimal_hyperparams(X_train, y_train)
 
 def test ():
     X_train, y_train = gen_train_features()
@@ -313,18 +327,24 @@ def test ():
     X, y = gen_validate_features()
     y_pred = classifier.predict(X)
     print "accuracy:", accuracy_score(y, y_pred)
-    print "score:", classifier.score(X, y)
+
+def usage ():
+    print "invalid options"
+
+def main ():
+    if len(sys.argv) < 2:
+        usage()
+    else:
+        option = sys.argv[1]
+        if option == "optimize_kernel":
+            choose_optimal_kernel()
+        elif option == "optimize_params":
+            choose_optimal_params()
+        elif option == "generate_features":
+            gen_train_features()
+            gen_validate_features()
+        elif option == "test":
+            test()
 
 if __name__ == "__main__":
-    option = sys.argv[1]
-    if option == "optimize_kernel":
-        choose_optimal_kernel()
-    elif option == "optimize_params":
-        choose_optimal_params()
-    elif option == "generate_features":
-        gen_train_features()
-        gen_validate_features()
-    elif option == "test":
-        test()
-    else:
-        print "invalid option"
+    main()
