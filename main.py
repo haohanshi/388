@@ -12,7 +12,7 @@ from sklearn.linear_model import LogisticRegression, LogisticRegressionCV #, SGD
 from sklearn.metrics import accuracy_score
 
 MIN_WORDS_PER_DOC = 3
-LABELS_FILE = "labels-new.json" # "labels.json"
+LABELS_FILE = "labels.json" # "labels.json"
 TRAIN_FEATURES_DIR = "train_features"
 VALIDATE_FEATURES_DIR = "validate_features"
 TRAIN_DATA_DIR = "train_data"
@@ -261,9 +261,10 @@ def read_features (feature_dir, label_map):
 def read_raw_data (raw_dir, feature_dir, label_map):
     X, y = [], []
     for src, label in label_map.iteritems():
-        filename = os.path.join(raw_dir, '{}.json'.format(src))
-        print "reading from {}...".format(filename)
-        with open(filename, 'r') as f:
+        filename = '{}.json'.format(src)
+        filepath = os.path.join(raw_dir, filename)
+        print "reading from {}...".format(filepath)
+        with open(filepath, 'r') as f:
             curr = json.load(f)
             labels = [label]*len(curr)
             X_curr, y_curr = create_features(np.array(curr), np.array(labels))
