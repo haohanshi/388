@@ -250,7 +250,7 @@ def read_features (feature_dir, label_map):
     print "reading from {}...".format(feature_dir)
     features = []
     for feature_file in label_map.keys():
-        with open(os.path.join(feature_dir, feature_file)) as f:
+        with open(os.path.join(feature_dir, feature_file), 'r') as f:
             features += json.load(f)
 
     features = zip(*features) # "unzip"
@@ -270,7 +270,7 @@ def read_raw_data (raw_dir, feature_dir, label_map):
             X_curr, y_curr = create_features(np.array(curr), np.array(labels))
 
             # save to file
-            with open(os.path.join(feature_dir, filename)) as g:
+            with open(os.path.join(feature_dir, filename), 'w') as g:
                 json.dump(zip(X_curr.tolist(), y_curr), f)
 
             # aggregate results
