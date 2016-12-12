@@ -1,18 +1,14 @@
 # 15388 Final Project
 
 ## Group Member:
-
-Name: Tianjun Ma
-
-Andrew ID: tianjunm
-
 Name: Mark Lee
-
 Andrew ID: marklee
 
 Name: Haohan Shi
-
 Andrew ID: haohans
+
+Name: Tianjun Ma
+Andrew ID: tianjunm
 
 ## How to run our code:
 Before starting, make sure that required packages are installed. We've put all the requirements in a txt file so that everything can be downloaded by calling the following command:
