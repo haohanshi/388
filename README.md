@@ -2,12 +2,15 @@
 
 ## Group Member:
 Name: Mark Lee
+
 Andrew ID: marklee
 
 Name: Haohan Shi
+
 Andrew ID: haohans
 
 Name: Tianjun Ma
+
 Andrew ID: tianjunm
 
 ## How to run our code:
