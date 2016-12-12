@@ -16,7 +16,7 @@ Andrew ID: haohans
 
 ## How to run our code:
 Before starting, make sure that required packages are installed. We've put all the requirements in a txt file so that everything can be downloaded by calling the following command:
-```python
+```terminal
 pip install --requirements.txt
 ```
 The main program can be run by running the main.py file in the repository. We only need one extra parameter to run the program during each step. 
