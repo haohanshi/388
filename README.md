@@ -15,6 +15,10 @@ Name: Haohan Shi
 Andrew ID: haohans
 
 ## How to run our code:
+Before starting, make sure that required packages are installed. We've put all the requirements in a txt file so that everything can be downloaded by calling the following command:
+```python
+pip install --requirements.txt
+```
 The main program can be run by running the main.py file in the repository. We only need one extra parameter to run the program during each step. 
 First of all, we should optimize the model before we start working on the data by calling
 ```python
@@ -39,9 +43,6 @@ to render the result of prediction model.
 ## nbviewer link:
 
 ## Links to large files:
-For all data used for training, validation and test:
-
-https://drive.google.com/drive/folders/0B3to2Ko7FJl1clVEelJ5OHY2SG8?usp=sharing
 
 ## Potential sources:
 
