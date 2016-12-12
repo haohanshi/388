@@ -318,10 +318,10 @@ def test ():
     X_train, y_train = gen_train_features()
     classifier = learn_classifier(X_train, y_train)
 
-    # print "testing on holdout set..."
-    # X, y = gen_validate_features()
-    # y_pred = classifier.predict(X)
-    # print "accuracy:", accuracy_score(y, y_pred)
+    print "testing on holdout set..."
+    X, y = gen_validate_features()
+    y_pred = classifier.predict(X)
+    print "accuracy:", accuracy_score(y, y_pred)
 
     print "testing on untrained data..."
     X_test, y_test = gen_test_features()
@@ -344,7 +344,7 @@ def main ():
         elif option == "optimize_params":
             choose_optimal_params()
         elif option == "generate_features":
-            # gen_train_features()
+            gen_train_features()
             gen_validate_features()
         elif option == "test":
             test()
