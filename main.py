@@ -3,26 +3,29 @@
 import sys, string, langid, grammar_check, enchant, re, json, nltk, time
 import os.path
 import numpy as np
-# from cross_validation import ModelSelector
 from syllables_en import count as count_syllables
 from nltk.tokenize import sent_tokenize, WhitespaceTokenizer
 from sklearn.svm import SVC as SVM
 from sklearn.model_selection import GridSearchCV
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV #, SGDClassifier
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.metrics import accuracy_score
 
 MIN_WORDS_PER_DOC = 3
-LABELS_FILE = "labels.json" # "labels.json"
-TRAIN_FEATURES_DIR = "train_features"
+
+TEST_LABELS_FILE = "test_labels.json"
+TRAIN_LABELS_FILE = "train_labels.json"
+VALIDATE_LABELS_FILE = TRAIN_LABELS_FILE
+
+TEST_FEATURES_DIR = "test_features"
 VALIDATE_FEATURES_DIR = "validate_features"
-TRAIN_DATA_DIR = "train_data"
-VALIDATE_DATA_DIR = "validate_data"
+TRAIN_FEATURES_DIR = "train_features"
+
 TEST_DATA_DIR = "test_data"
+VALIDATE_DATA_DIR = "validate_data"
+TRAIN_DATA_DIR = "train_data"
+
 GRID_SEARCH_RESULTS_FILE = "grid_search.txt"
-OPTIMAL_KERNEL = "linear"
-# C = 100
-C = 10
-SOLVER = "lbfgs"
+# OPTIMAL_KERNEL = "linear"
 
 # source: http://stackoverflow.com/a/7160778
 # modified so protocol is optional.
@@ -118,6 +121,14 @@ def get_metrics (doc):
 
     return res #, sentences, words
 
+# `syllables_per_word`: count the total number of syllables and divide by
+# total number of words
+# `words_per_sentence`: count the total number of words and divide by total
+# number of sentences
+# `spelling_errors_per_sentence`: count the total number of spelling
+# errors and divide by total number of sentences
+# `grammer_errors_per_sentence`: count the total number of
+# grammer errors and divide by total number of sentences
 def get_features (metrics):
     num_sentences = metrics['sentences']
 
@@ -128,35 +139,16 @@ def get_features (metrics):
     res = []
     num_sentences = float(num_sentences)
 
-    # `syllables_per_word`: count the total number of syllables and divide by
-    # total number of words
+    # compute features
     res.append(metrics['syllables'] / float(metrics['words']))
-
-    # `words_per_sentence`: count the total number of words and divide by total
-    # number of sentences
     res.append(metrics['words'] / num_sentences)
-
-    # `spelling_errors_per_sentence`: count the total number of spelling errors
-    # and divide by total number of sentences
     res.append(metrics['spelling_errors'] / num_sentences)
-
-    # `grammer_errors_per_sentence`: count the total number of grammer errors
-    # and divide by total number of sentences
     res.append(metrics['grammar_errors'] / num_sentences)
-
     return np.array(res)
 
 # given a list of docs (body of text), parse into tokens
 # if doc is too short, skip
-# otherwise, use the tokens to build an example with the features:
-# `syllables_per_word`: count the total number of syllables and divide by
-# total number of words
-# `words_per_sentence`: count the total number of words and divide by total
-# number of sentences
-# `spelling_errors_per_sentence`: count the total number of spelling
-# errors and divide by total number of sentences
-# `grammer_errors_per_sentence`: count the total number of
-# grammer errors and divide by total number of sentences
+# otherwise, use the tokens to build an example with the features
 def create_features (docs, labels):
     X, y = [], []
     non_english = 0
@@ -189,36 +181,23 @@ def learn_classifier (X_train, y_train, kernel='best'):
     clf = LogisticRegressionCV(
         Cs=list(np.power(10.0, np.arange(-10, 10))),
         penalty='l2',
-        # scoring='roc_auc',
         cv=10, # kfolds with k=10
         random_state=42,
         max_iter=10000,
         fit_intercept=True,
-        solver='lbfgs', #'newton-cg',
+        solver='lbfgs',
         tol=1e-4
     )
-
-    # clf = LogisticRegression(C=C, solver=SOLVER)
-
-    # clf = SGDClassifier(loss="log", n_iter=1000)
-
-    # if kernel == 'best' and OPTIMAL_KERNEL:
-    #     print "using kernel: {}".format(OPTIMAL_KERNEL)
-    #     clf = SVM(C=C, kernel=OPTIMAL_KERNEL)
-    # else:
-    #     print "using default kernel"
-    #     clf = SVM(C=C)
-
     clf.fit(X_train, y_train)
     print "done learning classifier"
     return clf
 
 # chooses optimal kernel for svm
-def optimal_kernel (X_train, y_train, X_validate, y_validate):
+def optimal_svm_kernel (X_train, y_train, X_validate, y_validate):
     best_kernel = None
     best_accuracy = 0
     for kernel in ['linear', 'rbf', 'poly', 'sigmoid']:
-        classifier = learn_classifier(X_train, y_train, kernel)
+        classifier = SVM(X_train, y_train, kernel)
         accuracy = classifier.score(X_validate, y_validate)
         if best_kernel is None or accuracy > best_accuracy:
             best_accuracy = accuracy
@@ -247,10 +226,12 @@ def optimal_hyperparams (X_train, y_train):
 ## data/feature helpers
 
 def read_features (feature_dir, label_map):
-    print "reading from {}...".format(feature_dir)
     features = []
-    for feature_file in label_map.keys():
-        with open(os.path.join(feature_dir, feature_file), 'r') as f:
+    for src in label_map.keys():
+        filename = "{}.json".format(src)
+        filepath = os.path.join(feature_dir, filename)
+        print "reading features from {}...".format(filepath)
+        with open(filepath, 'r') as f:
             features += json.load(f)
 
     features = zip(*features) # "unzip"
@@ -263,7 +244,7 @@ def read_raw_data (raw_dir, feature_dir, label_map):
     for src, label in label_map.iteritems():
         filename = '{}.json'.format(src)
         filepath = os.path.join(raw_dir, filename)
-        print "reading from {}...".format(filepath)
+        print "reading raw data from {}...".format(filepath)
         with open(filepath, 'r') as f:
             curr = json.load(f)
             labels = [label]*len(curr)
@@ -284,47 +265,50 @@ def read_raw_data (raw_dir, feature_dir, label_map):
 
 ## wrappers 
 
-def gen_train_features ():
-    with open(LABELS_FILE, 'r') as f:
+def gen_features (labels_file, features_dir, data_dir):
+    with open(labels_file, 'r') as f:
         label_map = json.load(f)
-
-    print "generating features for training..."
     try:
         # try using pre-generated features if they exist
-        X_train, y_train = read_features(TRAIN_FEATURES_DIR, label_map)
+        X, y = read_features(features_dir, label_map)
         print "features already generated"
-    except:
+    except Exception as e:
+        print e
         print "generating from raw data..."
-        X_train, y_train = read_raw_data(TRAIN_DATA_DIR, TRAIN_FEATURES_DIR,
-            label_map)
+        X, y = read_raw_data(data_dir, features_dir, label_map)
+    return X, y
+
+def gen_train_features ():
+    print "generating features for training..."
+    X_train, y_train = gen_features(TRAIN_LABELS_FILE, TRAIN_FEATURES_DIR,
+        TRAIN_DATA_DIR)
 
     print "done generating features for training"
     return X_train, y_train
 
 def gen_validate_features ():
-    with open(LABELS_FILE, 'r') as f:
-        label_map = json.load(f)
-
     print "generating features for validation..."
-    try:
-        # try using pre-generated features if they exist
-        X, y = read_features(VALIDATE_FEATURES_FILE)
-        print "features already generated"
-    except:
-        print "generating from raw data..."
-        X, y = read_raw_data(VALIDATE_DATA_DIR, VALIDATE_FEATURES_DIR,
-            label_map)
+    X, y = gen_features(VALIDATE_LABELS_FILE, VALIDATE_FEATURES_DIR,
+        VALIDATE_DATA_DIR)
 
     print "done generating features for validation"
     return X, y
 
-def choose_optimal_kernel ():
+def gen_test_features ():
+    print "generating features for testing..."
+    X_test, y_test = gen_features(TEST_LABELS_FILE, TEST_FEATURES_DIR,
+        TEST_DATA_DIR)
+
+    print "done generating features for testing"
+    return X_test, y_test
+
+def choose_optimal_svm_kernel ():
     X_train, y_train = gen_train_features()
     X, y = gen_validate_features()
 
     print "choosing optimal kernel"
     print "this might take a while..."
-    print optimal_kernel(X_train, y_train, X, y)
+    print optimal_svm_kernel(X_train, y_train, X, y)
 
 def choose_optimal_params ():
     X_train, y_train = gen_train_features()
@@ -334,25 +318,33 @@ def test ():
     X_train, y_train = gen_train_features()
     classifier = learn_classifier(X_train, y_train)
 
-    print "testing on holdout set..."
-    X, y = gen_validate_features()
-    y_pred = classifier.predict(X)
-    print "accuracy:", accuracy_score(y, y_pred)
+    # print "testing on holdout set..."
+    # X, y = gen_validate_features()
+    # y_pred = classifier.predict(X)
+    # print "accuracy:", accuracy_score(y, y_pred)
+
+    print "testing on untrained data..."
+    X_test, y_test = gen_test_features()
+    y_pred = classifier.predict(X_test)
+    print "accuracy:", accuracy_score(y_test, y_pred)
 
 def usage ():
-    print "invalid options"
+    options = [
+        "optimize_kernel", "optimize_params", "generate_features", "test"]
+    print "usage: ./main.py [{}]".format("|".join(options))
+    return
 
 def main ():
     if len(sys.argv) < 2:
         usage()
     else:
         option = sys.argv[1]
-        if option == "optimize_kernel":
-            choose_optimal_kernel()
+        if option == "optimize_svm_kernel":
+            choose_optimal_svm_kernel()
         elif option == "optimize_params":
             choose_optimal_params()
         elif option == "generate_features":
-            gen_train_features()
+            # gen_train_features()
             gen_validate_features()
         elif option == "test":
             test()
