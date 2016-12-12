@@ -17,7 +17,9 @@ Andrew ID: haohans
 ## How to run our code:
 The main program can be run by running the main.py file in the repository. We only need one extra parameter to run the program during each step. 
 First of all, we should optimize the model before we start working on the data by calling
+'''python
 ./main.py optimize_kernel
+'''
 and
 ./main.py optimize_params
 
