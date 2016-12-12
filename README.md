@@ -47,13 +47,11 @@ All the data we used for feature generating, training, validation and testing:
 https://drive.google.com/drive/folders/0B3to2Ko7FJl1clVEelJ5OHY2SG8?usp=sharing
 
 ## Potential sources:
-Statistics about demographics of various websites:
+Age distribution for Minecraft Player:
 
 https://www.quora.com/What-are-the-demographics-of-Minecraft-players
 
-http://www.ibtimes.com/audience-profiles-who-actually-reads-new-york-times-watches-fox-news-other-news-publications-1451828
-
-https://pypi.python.org/pypi/pylinkgrammar
+Age distribution for social media:
 
 http://jetscram.com/blog/industry-news/social-media-user-statistics-and-age-demographics-2014/
 
@@ -61,6 +59,11 @@ http://sproutsocial.com/insights/new-social-media-demographics/
 
 http://venturebeat.com/2012/08/22/social-media-demographics-stats-2012/
 
+http://www.ibtimes.com/audience-profiles-who-actually-reads-new-york-times-watches-fox-news-other-news-publications-1451828
+
+Python bindings for Link Grammar system:
+
+https://pypi.python.org/pypi/pylinkgrammar
 
 Reference we builidng grammar checker component for feature generation:
 
