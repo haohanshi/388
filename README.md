@@ -1,43 +1,37 @@
-# 15388 Final Project
+# Prediction of Education Level
 
 ## Group Member:
-Name: Mark Lee
+**Name**: Mark Lee  
+**Andrew ID**: marklee
 
-Andrew ID: marklee
+**Name**: Haohan Shi  
+**Andrew ID**: haohans
 
-Name: Haohan Shi
-
-Andrew ID: haohans
-
-Name: Tianjun Ma
-
-Andrew ID: tianjunm
+**Name**: Tianjun Ma  
+**Andrew ID**: tianjunm
 
 ## How to run our code:
-Before starting, make sure that required packages are installed. We've put all the requirements in a txt file so that everything can be downloaded by calling the following command:
+Before starting, make sure that required packages are installed:
 ```terminal
-pip install --requirements.txt
+pip install -r requirements.txt
 ```
-The main program can be run by running the main.py file in the repository. We only need one extra parameter to run the program during each step. 
-First of all, we should optimize the model before we start working on the data by calling
+The main program can be run by running the main.py file in the repository.
+If using SVM as model, the following will find the optimal kernel:
 ```terminal
 ./main.py optimize_kernel
 ```
-and
+If using LogisticRegression as model, the following will find optimal hyperparams:
 ```terminal
 ./main.py optimize_params
 ```
-Then, we can start generating features from the data we’ve collected:
+To generate the features used in training (already pre-generated in repo):
 ```terminal
 ./main.py generate_features
 ```
-
-This instruction will automatically generate the features from the pages we collected.
-In the end, we can test our model:
+To test the model with LogisticRegressionCV:
 ```terminal
 ./main.py test
 ```
-to render the result of prediction model.
 
 ## nbviewer link:
 
