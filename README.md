@@ -27,13 +27,13 @@ and
 ```terminal
 ./main.py optimize_params
 ```
-Then, we can start generating features from the data we’ve collected by calling:
+Then, we can start generating features from the data we’ve collected:
 ```terminal
 ./main.py generate_features
 ```
 
 This instruction will automatically generate the features from the pages we collected.
-In the end, we can test our model by calling:
+In the end, we can test our model:
 ```terminal
 ./main.py test
 ```
